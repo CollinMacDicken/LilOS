@@ -21,14 +21,11 @@ Purpose : Generic application start
 *   Application entry point.
 */
 int main(void) {
-  int i;
-
-  for (i = 0; i < 100; i++) {
-    printf("Hello World %d!\n", i);
+  OS_InitKernelHAL();
+  while(1)
+  {
   }
-  do {
-    i++;
-  } while (1);
+  return 0;
 }
 
 /*************************** End of file ****************************/

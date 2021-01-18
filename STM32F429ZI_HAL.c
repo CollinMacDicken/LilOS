@@ -38,24 +38,95 @@ Description : This code provides the Hardware Abstraction Layer (HAL) for the
 // The GREED LED on the Discovery Adapter Board
 #define   GREENPIN GPIO_ODR_OD3_Msk
 // The BLUE LED on the Discovery Adapter Board
-#define   BLUEPIN  GPIO_ODR_OD9_Msk 
-/******************************************************************************
-*******************************************************************************
-    Prototypes
-*******************************************************************************
-******************************************************************************/
+#define   BLUEPIN  GPIO_ODR_OD9_Msk
+
+#define MAX_UARTBUF_LENGTH 50
+
+uint8_t uartbuf[MAX_UARTBUF_LENGTH];
+uint8_t uartbuf_offset = 0;
 
 /******************************************************************************
-*******************************************************************************
-    Declarations & Types
-*******************************************************************************
+    OSp_InitUART
+		
+      Initializes PA9/10 for USART1 at 14400 baud, sets up interrupts for when
+      characters are received.
 ******************************************************************************/
+void OSp_InitUART(void)
+{
+  //enable USART1
+  RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+  
+  //enable GPIO Port A
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+  
+  //set PA9/10 to Alternate Function mode
+  GPIOA->MODER = (GPIOA->MODER & ~(GPIO_MODER_MODER9_Msk | GPIO_MODER_MODER10_Msk)) |
+                 (0b10 << GPIO_MODER_MODER9_Pos) | (0b10 << GPIO_MODER_MODER10_Pos);
+  
+  //set alternate function of PA9/10 to USART1
+  GPIOA->AFR[1] = (GPIOA->AFR[1] & ~(GPIO_AFRH_AFSEL9_Msk | GPIO_AFRH_AFSEL10_Msk)) |
+                  (7 << GPIO_AFRH_AFSEL9_Pos) | (7 << GPIO_AFRH_AFSEL10_Pos);
+
+
+  //set baud divisor to 69.4375 (baud rate of 14401 with 16MHz fck)
+  USART1->BRR = 0x457;   //14401
+  
+  //enable receiver and interrupts when data is enabled
+  USART1->CR1 |= USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+  
+  //setup UART interrupts in NVIC
+  NVIC_SetPriority(USART1_IRQn, 0);
+  NVIC_EnableIRQ(USART1_IRQn);
+
+  //enable UART
+  USART1->CR1 |= USART_CR1_UE;
+}
 
 /******************************************************************************
-*******************************************************************************
-    Helper Functions
-*******************************************************************************
+    OSp_SendString_UART
+		
+      Sends the given number of characters starting from the given address 
+      over USART1.
 ******************************************************************************/
+void OSp_SendString_UART(uint8_t *buf, uint8_t length)
+{
+  //switch to Tx
+  //USART1->CR1 = (USART1->CR1 & ~(USART_CR1_RE)) | USART_CR1_TE;
+
+  //send each character
+  while(length--)
+  {
+    USART1->DR = *(buf++);
+    while(!(USART1->SR & USART_SR_TXE)){}
+  }
+  
+  //send a newline
+  USART1->DR = '\n';
+  while(!(USART1->SR & USART_SR_TC)){}
+
+  //switch back to Rx
+  //USART1->CR1 |= USART_CR1_RE;
+}
+
+/******************************************************************************
+    USART1_IRQHandler
+		
+      Interrupt handler for USART1, inserts recieved character into buffer,
+      transmits the whole buffer over USART1 if a CR is received, or if the
+      buffer is full.
+******************************************************************************/
+void USART1_IRQHandler(void)
+{
+  //insert character into buffer
+  uartbuf[uartbuf_offset++] = USART1->DR;
+
+  //transmit buffer contents if CR is received, or buffer is full
+  if(uartbuf[uartbuf_offset - 1] == 0x0D || uartbuf_offset == MAX_UARTBUF_LENGTH)
+  {
+    OSp_SendString_UART(uartbuf, uartbuf_offset);
+    uartbuf_offset = 0;
+  }
+}
 
 /******************************************************************************
     OSp_GetLEDPins
@@ -267,5 +338,6 @@ unsigned OS_InitKernelHAL(void)
     OSp_InitGPIOG();
     OSp_InitGPIOA();
     OSp_InitTIM6();
+    OSp_InitUART();
     return 1; //not really much to go wrong here short of hardware errors
 }
