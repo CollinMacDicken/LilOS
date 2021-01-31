@@ -104,6 +104,9 @@ void OSp_SendString_UART(uint8_t *buf, uint8_t length)
   USART1->DR = '\n';
   while(!(USART1->SR & USART_SR_TC)){}
 
+  USART1->DR = '\r';
+  while(!(USART1->SR & USART_SR_TC)){}
+
   //switch back to Rx
   //USART1->CR1 |= USART_CR1_RE;
 }
