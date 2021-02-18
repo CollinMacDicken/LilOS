@@ -149,7 +149,7 @@ unsigned OS_InitKernel(const unsigned numTasks, const unsigned stackSize)
       return 0;
 
     //set up hardware
-    return OS_InitKernelHAL();
+    return 1;//OS_InitKernelHAL();
 }
 
 /******************************************************************************
@@ -642,7 +642,7 @@ unsigned OSp_AllocateInit(unsigned blockSize)
 
 
 /******************************************************************************
-    OS_Malloc
+fds    OS_Malloc
 		
       Selects a fitting memory block for the given blockSize (4-byte units)
     marks that block as in use and returns a pointer to the beginning of it.

@@ -12,7 +12,8 @@ Purpose : Generic application start
 
 #include <stdio.h>
 #include <stdlib.h>
-
+#include "STM32F429ZI_HAL.h"
+#include "LilOS.h"
 /*********************************************************************
 *
 *       main()
@@ -22,9 +23,8 @@ Purpose : Generic application start
 */
 int main(void) {
   OS_InitKernelHAL();
-  while(1)
-  {
-  }
+  OS_InitKernel(1, 40);
+  OS_Start();
   return 0;
 }
 

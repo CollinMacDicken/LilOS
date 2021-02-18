@@ -10,9 +10,10 @@ Description : This code provides the Hardware Abstraction Layer (HAL) for the
     Includes
 *******************************************************************************
 ******************************************************************************/
+#include        <stdint.h>
 #include 	"STM32F429ZI_HAL.h"
 #include 	"stm32f429xx.h"
-
+#include        "CommandLine.h"
 /******************************************************************************
 *******************************************************************************
     Definitions
@@ -42,6 +43,15 @@ Description : This code provides the Hardware Abstraction Layer (HAL) for the
 
 #define MAX_UARTBUF_LENGTH 50
 
+#define DEFAULT_UART_EN 1
+#define DEFAULT_UART_BAUD_FRACT 7
+#define DEFAULT_UART_BITMODE 0
+#define DEFAULT_UART_PARITYEN 0
+#define DEFAULT_UART_PARITYMODE 0
+#define DEFAULT_UART_STOPMODE 1
+#define DEFAULT_UART_BAUD_MANT 0x45
+
+UartConfig uart1Config;
 uint8_t uartbuf[MAX_UARTBUF_LENGTH];
 uint8_t uartbuf_offset = 0;
 
@@ -69,35 +79,55 @@ void OSp_InitUART(void)
 
 
   //set baud divisor to 69.4375 (baud rate of 14401 with 16MHz fck)
-  USART1->BRR = 0x457;   //14401
+  USART1->BRR = (uart1Config.baud_mant << 4) + uart1Config.baud_fract;   //14401
   
   //enable receiver and interrupts when data is enabled
-  USART1->CR1 |= USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+  USART1->CR1 |= (uart1Config.bitMode << USART_CR1_M_Pos) | (uart1Config.parityEn << USART_CR1_PCE_Pos) | 
+                 (uart1Config.parityMode << USART_CR1_PS_Pos) | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
   
+  USART1->CR2 |= (uart1Config.stopMode << USART_CR2_STOP_Pos);
+
   //setup UART interrupts in NVIC
   NVIC_SetPriority(USART1_IRQn, 0);
   NVIC_EnableIRQ(USART1_IRQn);
 
-  //enable UART
-  USART1->CR1 |= USART_CR1_UE;
+  if(uart1Config.en)
+  {
+    //enable UART
+    USART1->CR1 |= USART_CR1_UE;
+
+    USART1->DR = '>';
+  }
+  else
+  {
+    USART1->CR1 &= ~USART_CR1_UE;
+  }
 }
 
 /******************************************************************************
-    OSp_SendString_UART
+    OS_SendString_UART
 		
       Sends the given number of characters starting from the given address 
       over USART1.
 ******************************************************************************/
-void OSp_SendString_UART(uint8_t *buf, uint8_t length)
+void OS_SendString_UART(uint8_t *buf, uint8_t length)
 {
-  //switch to Tx
-  //USART1->CR1 = (USART1->CR1 & ~(USART_CR1_RE)) | USART_CR1_TE;
-
-  //send each character
-  while(length--)
+  if(length)
   {
-    USART1->DR = *(buf++);
-    while(!(USART1->SR & USART_SR_TXE)){}
+    //send each character
+    while(length--)
+    {
+      USART1->DR = *(buf++);
+      while(!(USART1->SR & USART_SR_TXE)){}
+    }
+  }
+  else
+  {
+    while(*buf)
+    {
+      USART1->DR = *(buf++);
+      while(!(USART1->SR & USART_SR_TXE)){}
+    }
   }
   
   //send a newline
@@ -106,9 +136,6 @@ void OSp_SendString_UART(uint8_t *buf, uint8_t length)
 
   USART1->DR = '\r';
   while(!(USART1->SR & USART_SR_TC)){}
-
-  //switch back to Rx
-  //USART1->CR1 |= USART_CR1_RE;
 }
 
 /******************************************************************************
@@ -120,14 +147,30 @@ void OSp_SendString_UART(uint8_t *buf, uint8_t length)
 ******************************************************************************/
 void USART1_IRQHandler(void)
 {
-  //insert character into buffer
-  uartbuf[uartbuf_offset++] = USART1->DR;
-
-  //transmit buffer contents if CR is received, or buffer is full
-  if(uartbuf[uartbuf_offset - 1] == 0x0D || uartbuf_offset == MAX_UARTBUF_LENGTH)
+  if(inCL)
   {
-    OSp_SendString_UART(uartbuf, uartbuf_offset);
-    uartbuf_offset = 0;
+    //backspace key was pressed
+    if(USART1->DR == 0x7F && uartbuf_offset)
+    {
+      USART1->DR = 0x7F;
+      --uartbuf_offset;
+    }
+    else if(USART1->DR != 0x7F && uartbuf_offset < MAX_UARTBUF_LENGTH)
+    {
+      //insert character into buffer
+      uartbuf[uartbuf_offset++] = USART1->DR;
+
+      //Enter key was pressed
+      if(uartbuf[uartbuf_offset - 1] == 0x0D)
+      {
+        OS_SendString_UART("\r", 0);
+        Command_CL(uartbuf, uartbuf_offset);
+        USART1->DR =  '>';
+        uartbuf_offset = 0;
+      }
+      else
+        USART1->DR =  uartbuf[uartbuf_offset - 1];
+    }
   }
 }
 
@@ -331,6 +374,18 @@ unsigned OS_GetButton(void)
 }
 
 
+void OSp_InitConfig(void)
+{
+  uart1Config.en = DEFAULT_UART_EN;
+  uart1Config.baud_fract = DEFAULT_UART_BAUD_FRACT;
+  uart1Config.baud_mant = DEFAULT_UART_BAUD_MANT;
+  uart1Config.bitMode = DEFAULT_UART_BITMODE;
+  uart1Config.parityEn = DEFAULT_UART_PARITYEN;
+  uart1Config.parityMode = DEFAULT_UART_PARITYMODE;
+  uart1Config.stopMode = DEFAULT_UART_STOPMODE;
+}
+
+
 /******************************************************************************
     OS_InitKernelHAL
 		
@@ -338,9 +393,12 @@ unsigned OS_GetButton(void)
 ******************************************************************************/
 unsigned OS_InitKernelHAL(void) 
 {
-    OSp_InitGPIOG();
-    OSp_InitGPIOA();
-    OSp_InitTIM6();
-    OSp_InitUART();
-    return 1; //not really much to go wrong here short of hardware errors
+  OSp_InitConfig();
+  OSp_InitGPIOG();
+  OSp_InitGPIOA();
+  OSp_InitTIM6();
+  OSp_InitUART();
+  while(inCL){}
+  OSp_InitUART();
+  return 1; //not really much to go wrong here short of hardware errors
 }

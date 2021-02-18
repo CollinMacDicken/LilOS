@@ -10,6 +10,8 @@ Description : Header for STM32F429ZI HAL
 #ifndef		__KERNEL_HAL__H__
 #define		__KERNEL_HAL__H__
 
+#include <stdint.h>
+
 // The RED LED on the Discovery Adapter Board
 #define   RED   0b001     
 // The GREED LED on the Discovery Adapter Board
@@ -17,6 +19,19 @@ Description : Header for STM32F429ZI HAL
 // The BLUE LED on the Discovery Adapter Board
 #define   BLUE  0b100                   
 
+typedef struct {
+  uint8_t en;
+  uint8_t baud_fract;
+  uint8_t bitMode;
+  uint8_t parityEn;
+  uint8_t parityMode;
+  uint8_t stopMode;
+  uint16_t baud_mant;
+
+
+} UartConfig;
+
+extern UartConfig uart1Config;
 
 /******************************************************************************
     OS_EnableIRQ
@@ -74,4 +89,13 @@ unsigned OS_InitKernelHAL(void);
       Enables the system timer to start the OS
 ******************************************************************************/
 void OS_StartTimer(void);
+
+/******************************************************************************
+    OS_SendString_UART
+		
+      Sends the given number of characters starting from the given address 
+      over USART1.
+******************************************************************************/
+void OS_SendString_UART(uint8_t *buf, uint8_t length);
+
 #endif	//	__KERNEL_HAL__H__
