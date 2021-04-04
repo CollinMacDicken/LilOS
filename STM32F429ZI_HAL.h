@@ -19,6 +19,22 @@ Description : Header for STM32F429ZI HAL
 // The BLUE LED on the Discovery Adapter Board
 #define   BLUE  0b100                   
 
+#define NUM_GPIOS 16
+
+typedef enum{
+  GPIO_A = 0,
+  GPIO_B,
+  GPIO_C,
+  GPIO_D,
+  GPIO_E,
+  GPIO_F,
+  GPIO_G,
+  GPIO_H,
+  GPIO_I,
+  GPIO_J,
+  GPIO_K
+} GPIO_port_t;
+
 typedef struct {
   uint8_t en;
   uint8_t baud_fract;
@@ -27,11 +43,17 @@ typedef struct {
   uint8_t parityMode;
   uint8_t stopMode;
   uint16_t baud_mant;
-
-
 } UartConfig;
 
+typedef struct {
+  uint8_t en;
+  uint8_t dir[NUM_GPIOS];
+  uint8_t oType[NUM_GPIOS];
+  uint8_t pull[NUM_GPIOS];
+} GpioConfig;
+
 extern UartConfig uart1Config;
+extern GpioConfig gpioCConfig;
 
 /******************************************************************************
     OS_EnableIRQ
@@ -97,5 +119,28 @@ void OS_StartTimer(void);
       over USART1.
 ******************************************************************************/
 void OS_SendString_UART(uint8_t *buf, uint8_t length);
+
+void OS_SsHighSPI(void);
+
+void OS_SsLowSPI(void);
+
+void OS_SetTimer(uint16_t hundred_us);
+
+uint8_t OS_TimerDone(void);
+
+void OS_ReadSPI(uint8_t *rxBuf, uint16_t rxLength);
+
+void OS_WriteSPI(uint8_t *txBuf, uint16_t txLength);
+
+void OS_CommSPI(uint8_t *txBuf, uint8_t *rxBuf, uint16_t length);
+
+void OS_SetGPIO(uint16_t val);
+
+void OS_ClearGPIO(uint16_t val);
+
+void OS_Wait_ms(uint16_t ms);
+
+uint16_t OS_GetVar();
+
 
 #endif	//	__KERNEL_HAL__H__

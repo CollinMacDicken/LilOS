@@ -20,6 +20,24 @@ Description : This code provides the Hardware Abstraction Layer (HAL) for the
 *******************************************************************************
 ******************************************************************************/
 
+/*
+SPI Pins
+PB12    NSS
+PB13    SCK
+PB14    MISO
+PB15    MOSI
+*/
+
+
+/*
+SPI Pins
+PE15    NSS
+PE12    SCK
+PE13    MISO
+PE14    MOSI
+*/
+
+
 // Optional definitions not required to produce working code
 #ifndef			MAX_WAIT
 	#define		BON(X)			|=(X)
@@ -33,6 +51,10 @@ Description : This code provides the Hardware Abstraction Layer (HAL) for the
 #define   ONE_SEC  16000000
 #define   ONE_MS   (ONE_SEC / 1000)
 #define   TIM6_IRQ 54
+
+#define SD_AF 5
+
+#define TIMER_PSC 1600
 
 // The RED LED on the Discovery Adapter Board
 #define   REDPIN   GPIO_ODR_OD2_Msk        
@@ -51,9 +73,220 @@ Description : This code provides the Hardware Abstraction Layer (HAL) for the
 #define DEFAULT_UART_STOPMODE 1
 #define DEFAULT_UART_BAUD_MANT 0x45
 
+#define DEFAULT_GPIO_EN 0
+#define DEFAULT_GPIO_DIR 1   //(0: input, 1: output)
+#define DEFAULT_GPIO_OTYPE 0 //(0: push-pull, 1: OD)
+#define DEFAULT_GPIO_PULL 0  //(0: none, 1: PU, 2: PD)
+
 UartConfig uart1Config;
+GpioConfig gpioCConfig;
 uint8_t uartbuf[MAX_UARTBUF_LENGTH];
 uint8_t uartbuf_offset = 0;
+
+uint16_t userVar = 0;
+
+void OS_SendString_UART(uint8_t *buf, uint8_t length);
+
+/******************************************************************************
+*******************************************************************************
+                                 TASK FUNCTIONS
+*******************************************************************************
+******************************************************************************/
+void OS_SetGPIO(uint16_t val)
+{
+  switch(val >> 8)
+  {
+    case GPIO_A:
+      GPIOA->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_B:
+      GPIOB->BSRR = 1 << (val & 0xFF);
+      break;
+
+    case GPIO_C:
+      GPIOC->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_D:
+      GPIOD->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_E:
+      GPIOE->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_F:
+      GPIOF->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_G:
+      GPIOG->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_H:
+      GPIOH->BSRR = 1 << (val & 0xFF);
+      break;
+
+    case GPIO_I:
+      GPIOI->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_J:
+      GPIOJ->BSRR = 1 << (val & 0xFF);
+      break;
+
+    case GPIO_K:
+      GPIOK->BSRR = 1 << (val & 0xFF);
+      break;
+  }
+}
+
+void OS_ClearGPIO(uint16_t val)
+{
+  val += NUM_GPIOS;
+  switch(val >> 8)
+  {
+    case GPIO_A:
+      GPIOA->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_B:
+      GPIOB->BSRR = 1 << (val & 0xFF);
+      break;
+
+    case GPIO_C:
+      GPIOC->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_D:
+      GPIOD->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_E:
+      GPIOE->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_F:
+      GPIOF->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_G:
+      GPIOG->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_H:
+      GPIOH->BSRR = 1 << (val & 0xFF);
+      break;
+
+    case GPIO_I:
+      GPIOI->BSRR = 1 << (val & 0xFF);
+      break;
+    
+    case GPIO_J:
+      GPIOJ->BSRR = 1 << (val & 0xFF);
+      break;
+
+    case GPIO_K:
+      GPIOK->BSRR = 1 << (val & 0xFF);
+      break;
+  }
+}
+
+void OS_SetVar(uint16_t val)
+{
+  userVar = val;
+}
+
+uint16_t OS_GetVar()
+{
+  return userVar;
+}
+
+void OS_SsHighSPI(void)
+{
+  GPIOE->ODR |= 1 << 15;
+  //GPIOE->ODR &= ~(1 << 15);
+}
+
+void OS_SsLowSPI(void)
+{
+  //GPIOE->ODR |= 1 << 15;
+  GPIOE->ODR &= ~(1 << 15);
+}
+
+/******************************************************************************
+    OSp_InitSPI
+		
+      Initializes PA9/10 for USART1 at 14400 baud, sets up interrupts for when
+      characters are received.
+******************************************************************************/
+void OSp_InitSPI(void)
+{
+  RCC->APB2ENR |= RCC_APB2ENR_SPI4EN;
+
+  RCC->AHB1ENR |= RCC_AHB1ENR_GPIOEEN;
+
+  GPIOE->MODER = (GPIOE->MODER & ~(GPIO_MODER_MODER15_Msk | GPIO_MODER_MODER12_Msk | GPIO_MODER_MODER13_Msk | GPIO_MODER_MODER14_Msk)) |
+                 (0b01 << GPIO_MODER_MODER15_Pos) | (0b10 << GPIO_MODER_MODER12_Pos) | (0b10 << GPIO_MODER_MODER13_Pos) | (0b10 << GPIO_MODER_MODER14_Pos);
+
+  GPIOE->AFR[1] = (GPIOE->AFR[1] & ~(GPIO_AFRH_AFSEL12_Msk | GPIO_AFRH_AFSEL13_Msk | GPIO_AFRH_AFSEL14_Msk)) |
+                  (SD_AF << GPIO_AFRH_AFSEL12_Pos) | (SD_AF << GPIO_AFRH_AFSEL13_Pos) | (SD_AF << GPIO_AFRH_AFSEL14_Pos);
+  
+
+  GPIOE->OSPEEDR |= 0x2A800000;
+
+  SPI4->CR2 |= SPI_CR2_SSOE;
+
+  SPI4->CR1 |= SPI_CR1_MSTR | SPI_CR1_SSM | 0b101000 | SPI_CR1_SPE;
+
+  //OS_SetTimer(1000);
+  //while(!OS_TimerDone()){}
+  //SPI4->CR1 |= SPI_CR1_SPE;
+
+  OS_SsHighSPI();
+}
+
+void OS_WriteSPI(uint8_t *txBuf, uint16_t txLength)
+{
+  uint16_t count = 0;
+  uint8_t dummy;
+  while(count < txLength)
+  {
+    SPI4->DR = txBuf[count++];
+    while(!(SPI4->SR & SPI_SR_TXE)){}
+    dummy = SPI4->DR;
+  }
+}
+
+void OS_ReadSPI(uint8_t *rxBuf, uint16_t rxLength)
+{
+  uint16_t count = 0;
+  uint8_t dummy;
+  while(count < rxLength)
+  {
+    SPI4->DR = 0xFF;
+    while(!(SPI4->SR & SPI_SR_TXE)){}
+    if(rxBuf)
+      rxBuf[count] = SPI4->DR;
+    else
+      dummy = SPI4->DR;
+    ++count;
+  }
+
+}
+
+void OS_CommSPI(uint8_t *txBuf, uint8_t *rxBuf, uint16_t length)
+{
+  uint16_t count = 0;
+  SPI4->CR1 |= SPI_CR1_SPE;
+  while(count < length)
+  {
+    SPI4->DR = txBuf[count];
+    while(!(SPI4->SR & SPI_SR_TXE)){}
+    rxBuf[count++] = SPI4->DR;
+  }
+}
 
 /******************************************************************************
     OSp_InitUART
@@ -236,6 +469,28 @@ void OSp_InitGPIOG(void)
 }
 
 
+void OSp_InitGPIOC(void)
+{
+  uint16_t wait;
+  uint8_t i;
+
+  RCC->AHB1ENR |= gpioCConfig.en << RCC_AHB1ENR_GPIOCEN_Pos;
+  for (wait = 0x00; wait < MAX_WAIT; ++wait){}
+  
+  GPIOC->MODER = 0x00000000;
+  GPIOC->OTYPER &= 0xFFFF0000;
+  GPIOC->PUPDR = 0x00000000;
+  for(i = 0; i < NUM_GPIOS; ++i)
+  {
+    GPIOC->MODER |= (gpioCConfig.dir)[i] << (i*2);
+    GPIOC->OTYPER |= (gpioCConfig.oType)[i] << i;
+    GPIOC->PUPDR |= (gpioCConfig.pull)[i] << (i*2);
+  }
+
+
+}
+
+
 /******************************************************************************
     OSp_InitGPIOA
 		
@@ -313,6 +568,38 @@ void OS_StartTimer(void)
   TIM6->CR1 |= TIM_CR1_CEN;
 }
 
+void OS_SetTimer(uint16_t hundred_us)
+{
+  RCC->APB1ENR |= RCC_APB1ENR_TIM7EN;
+  TIM7->PSC = TIMER_PSC;
+  
+  TIM7->DIER &= ~TIM_DIER_UIE;
+
+  TIM7->CNT = 0;
+
+  TIM7->ARR = hundred_us - 1;
+
+  TIM7->CR1 |= 1;
+}
+
+uint8_t OS_TimerDone()
+{
+  if(TIM7->SR & TIM_SR_UIF)
+  {
+    TIM7->CR1 &= ~TIM_CR1_CEN;
+    TIM7->SR &= ~TIM_SR_UIF;
+    return 1;
+  }
+
+  return 0;
+}
+
+void OS_Wait_ms(uint16_t ms)
+{
+  OS_SetTimer(ms*10);
+  while(!OS_TimerDone()){};
+}
+
 void OS_EnableIRQ(void)
 {
   OS_CRITICAL_END;
@@ -373,9 +660,15 @@ unsigned OS_GetButton(void)
     return (GPIOA->IDR & GPIO_IDR_ID0_Msk) >> GPIO_IDR_ID0_Pos;
 }
 
-
+/******************************************************************************
+    OSp_InitConfig
+		
+      Fills configuration structs with default values.
+******************************************************************************/
 void OSp_InitConfig(void)
 {
+  uint8_t i;
+
   uart1Config.en = DEFAULT_UART_EN;
   uart1Config.baud_fract = DEFAULT_UART_BAUD_FRACT;
   uart1Config.baud_mant = DEFAULT_UART_BAUD_MANT;
@@ -383,6 +676,14 @@ void OSp_InitConfig(void)
   uart1Config.parityEn = DEFAULT_UART_PARITYEN;
   uart1Config.parityMode = DEFAULT_UART_PARITYMODE;
   uart1Config.stopMode = DEFAULT_UART_STOPMODE;
+  
+  gpioCConfig.en = DEFAULT_GPIO_EN;
+  for(i = 0; i < NUM_GPIOS; ++i)
+  {
+    (gpioCConfig.dir)[i] = DEFAULT_GPIO_DIR;
+    (gpioCConfig.oType)[i] = DEFAULT_GPIO_OTYPE;
+    (gpioCConfig.pull)[i] = DEFAULT_GPIO_PULL;
+  }
 }
 
 
@@ -398,7 +699,10 @@ unsigned OS_InitKernelHAL(void)
   OSp_InitGPIOA();
   OSp_InitTIM6();
   OSp_InitUART();
+  //OSp_InitSPI();
+  //inCL = 0;
   while(inCL){}
   OSp_InitUART();
+  OSp_InitGPIOC();
   return 1; //not really much to go wrong here short of hardware errors
 }

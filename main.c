@@ -22,9 +22,13 @@ Purpose : Generic application start
 *   Application entry point.
 */
 int main(void) {
+  OS_InitBITasks();
   OS_InitKernelHAL();
-  OS_InitKernel(1, 40);
+  OS_InitKernel(5, 40);
   OS_Start();
+  while(1)
+  {
+  }
   return 0;
 }
 

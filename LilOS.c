@@ -10,6 +10,8 @@ Description : Contains implementation of RTOS functions.
 *******************************************************************************
 ******************************************************************************/
 #include "LilOS.h"
+#include "CommandLine.h"
+#include <string.h>
 #include <stdlib.h>
 
 /******************************************************************************
@@ -29,27 +31,37 @@ Description : Contains implementation of RTOS functions.
 #define PARENT_INDEX(i)      ((i%2)?(i-1)/2:(i/2)-1)
 #define LEFT_CHILD_INDEX(i)  ((i*2)+1)
 #define RIGHT_CHILD_INDEX(i) ((i+1)*2)
+
 /******************************************************************************
 *******************************************************************************
     Declarations & Types
 *******************************************************************************
 ******************************************************************************/
-typedef	void (* OS_TaskAddress)(void);	
-
 typedef enum {READY = OS_READY, RUNNING = OS_RUNNING, SATISFIED = OS_SATISFIED, BLOCKED = OS_BLOCKED} taskState_t;
+
+typedef	void (* OS_TaskAddress)(void);
+
+BI_TaskStruct BI_tasks[5];
 
 //task Control Block
 typedef struct 
 {
-  unsigned        *sp;          //task stack pointer
-  unsigned        taskID;       
-  unsigned        taskPriority;
-  unsigned        taskRuntime;  //expected number of clock ticks to complete task
-  unsigned        taskDeadline; //periodic deadline
-  unsigned        taskTime;     //number of clock ticks that the task has been run so far
-  taskState_t     taskState;    
+  uint32_t        *sp;          //task stack pointer
+  uint32_t        taskID;       
+  uint32_t        taskPriority;
+  uint32_t        taskRuntime;  //expected number of clock ticks to complete task
+  uint32_t        taskDeadline; //periodic deadline
+  uint32_t        taskTime;     //number of clock ticks that the task has been run so far
+  uint16_t        taskVar;
+  uint16_t        funcParam[OS_MAX_STEPS_PER_TASK];
+  void            ((* taskFunc[OS_MAX_STEPS_PER_TASK])(uint16_t));
+  taskState_t     taskState;
   OS_TaskAddress  taskAddress;
 } TCB;
+
+
+void RunTask(void);
+
 
 //task node for task lists
 typedef struct
@@ -105,6 +117,7 @@ void OSp_IdleTask(void);
 void OSp_UpdateSatisfiedList(void);
 void OSp_UpdateBlockedList(unsigned semID);
 char OSp_ScheduleTask(void);
+void OSp_RunTask(void);
 void OSp_SetError(kernelErrors error);
 taskNode *OSp_CompareNodePrios(taskNode *A, taskNode *B);
 void OSp_InsertNode(taskState_t state, taskNode *node);
@@ -114,6 +127,9 @@ unsigned OSp_AllocateInit(unsigned blockSize);
 void OSp_InsertFreeHeap(unsigned size, unsigned allocIndex);
 void OSp_RemoveFreeHeap(unsigned size, unsigned allocIndex);
 void OSp_SwapMemNodes(memNode *A, memNode *B);
+void OSp_SetVar(uint16_t val);
+void OSp_AddVar(uint16_t val);
+void OSp_SubVar(uint16_t val);
 /******************************************************************************
 *******************************************************************************
     Helper Functions
@@ -141,34 +157,109 @@ unsigned OS_InitKernel(const unsigned numTasks, const unsigned stackSize)
     OS_systemTick = 0;
     
     //Create Idle task and set it to running state
-    if(OS_CreateTask(OSp_IdleTask, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF) == 0)
+    if(OS_CreateTask("", 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF) == 0)
       return 0;
+
+    uint8_t i;
+    for(i = 0; i < OS_MAX_BITASKS; ++i)
+    {
+      if(BI_tasks[i].en)
+      {
+        OS_CreateTask(BI_tasks[i].funcString, BI_tasks[i].priority, BI_tasks[i].runtime, BI_tasks[i].deadline);
+      }
+    }
     OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
     
     if(OSp_AllocateInit(2) == 0)
       return 0;
 
     //set up hardware
-    return 1;//OS_InitKernelHAL();
+    return 1;
 }
 
+void OS_InitBITasks()
+{
+  uint8_t i;
+  for(i = 0; i < OS_MAX_BITASKS; ++i)
+  {
+    BI_tasks[i].en = 0;
+    BI_tasks[i].numsteps = 0;
+    BI_tasks[i].deadline = 0xFFFF;
+    BI_tasks[i].priority = 0xFFFF;
+    BI_tasks[i].runtime = 0xFFFF;
+    strcpy(BI_tasks[i].funcString, "");
+  }
+}
 /******************************************************************************
     OS_TaskCreate
 		
       Takes the assigned function pointer and uses it to create a kernel task
     that is ready for execution.
 ******************************************************************************/
-unsigned OS_CreateTask(void (* newTask)(void), unsigned priority, unsigned runtime, unsigned deadline) 
+unsigned OS_CreateTask(char *funcStr, unsigned priority, unsigned runtime, unsigned deadline) 
 {
     //set error state if max tasks supported by the OS has been exceeded
-    if(newTaskID > OS_numTasks || newTask == 0)
+    if(newTaskID > OS_numTasks)
     {
       OSp_SetError(ALLOC_ERROR);
       return 0;
     }
+    
+    uint8_t funcInd = 0;
+    char *temp = funcStr;
+    while(*temp && *temp != ';')
+    {
+      while(*temp != ';' && (*temp == ' ' || *temp == '\r' || *temp == '\n'))
+        ++temp;
+      
+      if(*temp != ';')
+      {
+        if(Compare("SetGPIO", temp))
+        {
+          tasks[newTaskID].tcb.taskFunc[funcInd] = OS_SetGPIO;
+          tasks[newTaskID].tcb.funcParam[funcInd] = atoi(temp + strlen("SetGPIOA("));
+          tasks[newTaskID].tcb.funcParam[funcInd] += (temp[strlen("SetGPIO")] - 'A') << 8;
+        }
+        else if(Compare("ClearGPIO", temp))
+        {
+          tasks[newTaskID].tcb.taskFunc[funcInd] = OS_ClearGPIO;
+          tasks[newTaskID].tcb.funcParam[funcInd] = atoi(temp + strlen("ClearGPIOA("));
+          tasks[newTaskID].tcb.funcParam[funcInd] += (temp[strlen("ClearGPIO")] - 'A') << 8;
+        }
+        else if(Compare("Wait_ms", temp))
+        {
+          tasks[newTaskID].tcb.taskFunc[funcInd] = OS_Wait_ms;
+          tasks[newTaskID].tcb.funcParam[funcInd] = atoi(temp + strlen("Wait_ms("));
+        }
+        else if(Compare("SetVar", temp))
+        {
+          tasks[newTaskID].tcb.taskFunc[funcInd] = OSp_SetVar;
+          tasks[newTaskID].tcb.funcParam[funcInd] = atoi(temp + strlen("SetVar("));
+        }
+        else if(Compare("AddVar", temp))
+        {
+          tasks[newTaskID].tcb.taskFunc[funcInd] = OSp_AddVar;
+          tasks[newTaskID].tcb.funcParam[funcInd] = atoi(temp + strlen("AddVar("));
+        }
+        else if(Compare("SubVar", temp))
+        {
+          tasks[newTaskID].tcb.taskFunc[funcInd] = OSp_SubVar;
+          tasks[newTaskID].tcb.funcParam[funcInd] = atoi(temp + strlen("SubVar("));
+        }
+        else //WHAT
+        {
+          while(1){}
+        }
+        ++funcInd;
+      }
+      while(*temp != ';' && !(*temp == ' ' || *temp == '\r' || *temp == '\n'))
+      {
+        ++temp;
+      }
+    }
 
     //set up TCB
-    tasks[newTaskID].tcb.taskAddress = newTask;
+    tasks[newTaskID].tcb.taskAddress = OSp_RunTask;
     tasks[newTaskID].tcb.taskID = newTaskID;
     tasks[newTaskID].tcb.taskState = READY;
     tasks[newTaskID].tcb.taskPriority = priority;
@@ -178,7 +269,7 @@ unsigned OS_CreateTask(void (* newTask)(void), unsigned priority, unsigned runti
     
     //set up Stack
     stacks[newTaskID][OS_stackSize - 1] = OS_STACK_MARKER;     //Border Marker
-    stacks[newTaskID][OS_stackSize - 3] = (unsigned) newTask;  //Link Register
+    stacks[newTaskID][OS_stackSize - 3] = (unsigned) OSp_RunTask;  //Link Register
 
     //Code from Valvano text
     stacks[newTaskID][OS_stackSize - 2] = 0x01000000;          //Thumb bit
@@ -851,6 +942,38 @@ void OSp_SwapMemNodes(memNode *A, memNode *B)
 void OSp_SetError(kernelErrors error)
 {
   currentError = error;
+}
+
+void OSp_SetVar(uint16_t val)
+{
+  OS_TaskRUNNING->taskVar = val;
+}
+
+void OSp_AddVar(uint16_t val)
+{
+  OS_TaskRUNNING->taskVar += val;
+}
+
+void OSp_SubVar(uint16_t val)
+{
+  OS_TaskRUNNING->taskVar -= val;
+}
+
+void OSp_RunTask(void)
+{
+  char i = 0;
+  while(1)
+  {
+    if(OS_TaskRUNNING->taskFunc[i])
+    {
+      (*OS_TaskRUNNING->taskFunc[i])(OS_TaskRUNNING->funcParam[i]);
+      ++i;
+    }
+    else
+    {
+      i = 0;
+    }
+  }
 }
 
 /******************************************************************************

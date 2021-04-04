@@ -29,6 +29,8 @@ Description : Kernel header that user tasks will interact with.
 #define   OS_STACK_MARKER     0xDEADBEEF
 #define   OS_HEAP_SIZE        512
 #define   OS_HEAP_BLOCK_ALIGN 2
+#define   OS_MAX_STEPS_PER_TASK 10
+#define   OS_MAX_BITASKS        5
 /******************************************************************************
 *******************************************************************************
     Public Prototypes
@@ -37,6 +39,20 @@ Description : Kernel header that user tasks will interact with.
 typedef enum {NO_ERROR, UNDEFINED_ERROR, ALLOC_ERROR, FREE_ERROR, TASK_STATE_MISMATCH,
              INVALID_SEM_ERROR, MAX_SEM_ERROR, SEM_ACQ_ERROR} kernelErrors;
 typedef enum {MUTEX, COUNTING} kernelObjects;
+
+typedef struct
+{
+  char en;
+  char numsteps;
+  char funcString[300];
+  unsigned priority;
+  unsigned runtime;
+  unsigned deadline;
+} BI_TaskStruct;
+
+extern BI_TaskStruct BI_tasks[OS_MAX_BITASKS];
+
+void OS_InitBITasks();
 
 /******************************************************************************
     OS_InitKernel
@@ -52,7 +68,7 @@ unsigned OS_InitKernel(unsigned numTasks, unsigned stackSize);
       Takes the assigned function pointer and uses it to create a kernel task
     that is ready for execution.
 ******************************************************************************/
-unsigned OS_CreateTask(void (* newTask)(void), unsigned priority, unsigned runtime, unsigned deadline);
+unsigned OS_CreateTask(char *funcString, unsigned priority, unsigned runtime, unsigned deadline);
 
 
 /******************************************************************************
