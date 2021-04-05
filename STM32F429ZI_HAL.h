@@ -19,6 +19,10 @@ Description : Header for STM32F429ZI HAL
 // The BLUE LED on the Discovery Adapter Board
 #define   BLUE  0b100                   
 
+#define   ONE_SEC  16000000
+#define   ONE_MS   (ONE_SEC / 1000)
+#define   ONE_US   (ONE_MS / 1000)
+
 #define NUM_GPIOS 16
 
 typedef enum{
@@ -54,6 +58,7 @@ typedef struct {
 
 extern UartConfig uart1Config;
 extern GpioConfig gpioCConfig;
+extern uint16_t timeout;
 
 /******************************************************************************
     OS_EnableIRQ

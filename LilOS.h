@@ -40,6 +40,13 @@ typedef enum {NO_ERROR, UNDEFINED_ERROR, ALLOC_ERROR, FREE_ERROR, TASK_STATE_MIS
              INVALID_SEM_ERROR, MAX_SEM_ERROR, SEM_ACQ_ERROR} kernelErrors;
 typedef enum {MUTEX, COUNTING} kernelObjects;
 
+typedef enum
+{
+  SCHED_EDF,
+  SCHED_RR,
+  SCHED_NUM
+} schedule_t;
+
 typedef struct
 {
   char en;
@@ -50,6 +57,8 @@ typedef struct
   unsigned deadline;
 } BI_TaskStruct;
 
+extern schedule_t OS_Scheduler;
+extern uint16_t OS_sched_timeout;
 extern BI_TaskStruct BI_tasks[OS_MAX_BITASKS];
 
 void OS_InitBITasks();

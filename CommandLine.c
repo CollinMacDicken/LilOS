@@ -44,6 +44,44 @@ void Command_help(char* msg)
   strcpy(msg, "helpmsg\n");
 }
 
+void Query_Scheduler(char *msg)
+{
+  switch(OS_Scheduler)
+  {
+    case SCHED_EDF:
+      sprintf(msg, "%d : Earliest Deadline First\n", SCHED_EDF);
+      break;
+
+    case SCHED_RR:
+      sprintf(msg, "%d : Round-Robin\n", SCHED_RR);
+      break;
+  }
+}
+
+void Command_Scheduler(char *msg, uint8_t val)
+{
+  if(val < SCHED_NUM)
+  {
+    OS_Scheduler = val;
+    strcpy(msg, "OK\n");
+  }
+  else
+  {
+    sprintf(msg, "Invalid parameter, use the following:\r\n: %d: Earliest Deadline First\r\n %d: Round-Robin");
+  }
+}
+
+void Query_Timeout(char *msg)
+{
+  sprintf(msg, "%dus\n", timeout);
+}
+
+void Command_Timeout(char *msg, uint16_t val)
+{
+  timeout = val;
+  strcpy(msg, "OK\n");
+}
+
 void Query_UART9bit(char* msg)
 {
   sprintf(msg, "%u: %u data bits\n", uart1Config.bitMode, uart1Config.bitMode+8);
@@ -419,7 +457,22 @@ void Command_CL(char *buf, uint8_t size)
     {
       Command_help(msg);
     }
-  
+    else if(Compare("scheduler_type?", buf))
+    {
+      Query_Scheduler(msg);
+    }
+    else if(Compare("scheduler_type", buf))
+    {
+      Command_Scheduler(msg, atoi(buf+strlen("scheduler_type")));
+    }
+    else if(Compare("scheduler_timeout?", buf))
+    {
+      Query_Timeout(msg);
+    }
+    else if(Compare("scheduler_timeout", buf))
+    {
+      Command_Timeout(msg, atoi(buf+strlen("scheduler_timeout")));
+    }
     else if(Compare("UART1-enable?", buf))
     {
       Query_UARTenable(msg);

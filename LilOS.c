@@ -107,6 +107,7 @@ taskNode        tasks[OS_MAX_TASKS];                            //array where ta
 memNode         freeBlocks[OS_HEAP_SIZE / OS_HEAP_BLOCK_ALIGN]; //Maps memory based on size
 SCB             semaphores[OS_MAX_SEMS];
 TCB             *OS_TaskRUNNING;
+schedule_t      OS_Scheduler = SCHED_EDF;
 
 /******************************************************************************
 *******************************************************************************
@@ -157,7 +158,7 @@ unsigned OS_InitKernel(const unsigned numTasks, const unsigned stackSize)
     OS_systemTick = 0;
     
     //Create Idle task and set it to running state
-    if(OS_CreateTask("", 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF) == 0)
+    if(OS_Scheduler != SCHED_RR && OS_CreateTask("", 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF) == 0)
       return 0;
 
     uint8_t i;
@@ -526,48 +527,64 @@ void OSp_UpdateBlockedList(unsigned semID)
 ******************************************************************************/
 char OSp_ScheduleTask(void)
 {
-  //make sure that any tasks that have passed their deadlines and need to be run again are put back on the ready list
-  OSp_UpdateSatisfiedList();
-
-  //if the current task has been blocked, place it on the blocked list and switch to the next ready task
-  if(OS_TaskRUNNING->taskState == BLOCKED)
+  switch(OS_Scheduler)
   {
-     OSp_ChangeTaskState(RUNNING, BLOCKED, taskRunningHead);
-     OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
-     ++OS_systemTick;
-     return 1;
-  }
+    case SCHED_EDF:
+      //make sure that any tasks that have passed their deadlines and need to be run again are put back on the ready list
+      OSp_UpdateSatisfiedList();
 
-  //if the current task has met its runtime, place it on the satisfied list and switch to the next ready task
-  else if(++(OS_TaskRUNNING->taskTime) == OS_TaskRUNNING->taskRuntime)
-  {
-    OS_TaskRUNNING->taskTime = 0;
-    OSp_ChangeTaskState(RUNNING, SATISFIED, taskRunningHead);
-    OSp_UpdateSatisfiedList();
-    OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
-    ++OS_systemTick;
-    return 1;
-  }
+      //if the current task has been blocked, place it on the blocked list and switch to the next ready task
+      if(OS_TaskRUNNING->taskState == BLOCKED)
+      {
+         OSp_ChangeTaskState(RUNNING, BLOCKED, taskRunningHead);
+         OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
+         ++OS_systemTick;
+         return 1;
+      }
 
-  //if the next ready task is higher priority than the currently running task, place the currently running task on the ready list and switch to the next ready task
-  else if(OSp_CompareNodePrios(taskReadyHead, taskRunningHead) == taskReadyHead)
-  {
-    OSp_ChangeTaskState(RUNNING, READY, taskRunningHead);
-    OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
-    ++OS_systemTick;
-    return 1;
-  }
+      //if the current task has met its runtime, place it on the satisfied list and switch to the next ready task
+      else if(++(OS_TaskRUNNING->taskTime) == OS_TaskRUNNING->taskRuntime)
+      {
+        OS_TaskRUNNING->taskTime = 0;
+        OSp_ChangeTaskState(RUNNING, SATISFIED, taskRunningHead);
+        OSp_UpdateSatisfiedList();
+        OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
+        ++OS_systemTick;
+        return 1;
+      }
 
-  //no context switch
-  ++OS_systemTick;
-  return 0;
+      //if the next ready task is higher priority than the currently running task, place the currently running task on the ready list and switch to the next ready task
+      else if(OSp_CompareNodePrios(taskReadyHead, taskRunningHead) == taskReadyHead)
+      {
+        OSp_ChangeTaskState(RUNNING, READY, taskRunningHead);
+        OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
+        ++OS_systemTick;
+        return 1;
+      }
+
+      //no context switch
+      ++OS_systemTick;
+      return 0;
+
+    case SCHED_RR:
+      OSp_ChangeTaskState(RUNNING, SATISFIED, taskRunningHead);
+      if(!taskReadyHead)
+      {
+        while(taskSatisfiedHead)
+        {
+          OSp_ChangeTaskState(SATISFIED, READY, taskSatisfiedHead);
+        }
+      }
+      OSp_ChangeTaskState(READY, RUNNING, taskReadyHead);
+      return 1;
+  }
 }
 
 
 /******************************************************************************
     OSp_CompareNodePrios
 		
-      Checks whether Node A has higher priority than Node B, using EDF
+      Checks whether Node A has higher priority than Node B
 ******************************************************************************/
 taskNode *OSp_CompareNodePrios(taskNode *A, taskNode *B)
 {
@@ -577,13 +594,17 @@ taskNode *OSp_CompareNodePrios(taskNode *A, taskNode *B)
   if(B && !A)
     return B;
   
-  //if A has an earlier deadline than B, or the same deadline but higher priority, A is the winner
-  if(A->tcb.taskDeadline < B->tcb.taskDeadline ||
-    (A->tcb.taskDeadline == B->tcb.taskDeadline && 
-     A->tcb.taskPriority <= B->tcb.taskPriority))
-    return A;
+  switch(OS_Scheduler)
+  {
+    case SCHED_EDF:
+      //if A has an earlier deadline than B, or the same deadline but higher priority, A is the winner
+      return (A->tcb.taskDeadline < B->tcb.taskDeadline ||
+             (A->tcb.taskDeadline == B->tcb.taskDeadline && 
+              A->tcb.taskPriority <= B->tcb.taskPriority))? A : B;
 
-  return B;
+    case SCHED_RR:
+      return (A->tcb.taskPriority <= B->tcb.taskPriority)? A : B;
+  }
 }
 
 

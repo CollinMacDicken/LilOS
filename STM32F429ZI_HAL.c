@@ -48,8 +48,6 @@ PE14    MOSI
 
 #define   OS_CRITICAL_BEGIN __disable_irq()
 #define   OS_CRITICAL_END   __enable_irq()
-#define   ONE_SEC  16000000
-#define   ONE_MS   (ONE_SEC / 1000)
 #define   TIM6_IRQ 54
 
 #define SD_AF 5
@@ -82,8 +80,8 @@ UartConfig uart1Config;
 GpioConfig gpioCConfig;
 uint8_t uartbuf[MAX_UARTBUF_LENGTH];
 uint8_t uartbuf_offset = 0;
-
 uint16_t userVar = 0;
+uint16_t timeout = 1000;
 
 void OS_SendString_UART(uint8_t *buf, uint8_t length);
 
@@ -527,7 +525,7 @@ void OSp_InitGPIOA(void)
       The clock to the TIM6 module is enabled and configured to run at a 1ms
     cycle, causing an interrupt if global interrupts are enabled. 
 ******************************************************************************/
-void OSp_InitTIM6(void) 
+void OSp_InitTIM6(uint16_t timeval) 
 {
     volatile unsigned int wait = MAX_WAIT;	
 
@@ -550,7 +548,7 @@ void OSp_InitTIM6(void)
     TIM6->PSC = 0;
 
     // Value for auto-reload register (sets the timer duration)
-    TIM6->ARR = ONE_MS;
+    TIM6->ARR = timeval;
 
     // Set the timer to the lowest-numbered (best-possible) priority
     // [4] pp.208, 214, core_cm4.h in (Proj. Dir.)/CMSIS_4/CMSIS/Include
@@ -697,12 +695,12 @@ unsigned OS_InitKernelHAL(void)
   OSp_InitConfig();
   OSp_InitGPIOG();
   OSp_InitGPIOA();
-  OSp_InitTIM6();
   OSp_InitUART();
   //OSp_InitSPI();
   //inCL = 0;
   while(inCL){}
   OSp_InitUART();
   OSp_InitGPIOC();
+  OSp_InitTIM6(timeout * ONE_US);
   return 1; //not really much to go wrong here short of hardware errors
 }
