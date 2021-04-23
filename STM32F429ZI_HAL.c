@@ -14,6 +14,7 @@ Description : This code provides the Hardware Abstraction Layer (HAL) for the
 #include 	"STM32F429ZI_HAL.h"
 #include 	"stm32f429xx.h"
 #include        "CommandLine.h"
+#include        "LilOS.h"
 /******************************************************************************
 *******************************************************************************
     Definitions
@@ -536,19 +537,38 @@ void OSp_InitTIM6(uint16_t timeval)
     for (wait = 0x00; wait < MAX_WAIT; ) {
       ++wait;
     } 
-
-    // Enable auto-reload, only over/underflow causes interrupts
-    // Ensure counter is free-running (does not stop counting), interrupts enabled
-    TIM6->CR1 = (TIM6->CR1 & ~(TIM_CR1_OPM_Msk | TIM_CR1_UDIS_Msk)) | TIM_CR1_ARPE | TIM_CR1_URS;
     
-    // Interrupt on over/underflow enabled
-    TIM6->DIER |= TIM_DIER_UIE;
+    if(OS_Scheduler != SCHED_COOP)
+    {
+      // Enable auto-reload, only over/underflow causes interrupts
+      // Ensure counter is free-running (does not stop counting), interrupts enabled
+      TIM6->CR1 = (TIM6->CR1 & ~(TIM_CR1_OPM_Msk | TIM_CR1_UDIS_Msk)) | TIM_CR1_ARPE | TIM_CR1_URS;
+    
+      // Interrupt on over/underflow enabled
+      TIM6->DIER |= TIM_DIER_UIE;
 
-    // No prescaler used
-    TIM6->PSC = 0;
+      // No prescaler used
+      TIM6->PSC = 0;
 
-    // Value for auto-reload register (sets the timer duration)
-    TIM6->ARR = timeval;
+      // Value for auto-reload register (sets the timer duration)
+      TIM6->ARR = timeval;
+    }
+    else
+    {
+      // Enable auto-reload, only over/underflow causes interrupts
+      // Ensure counter is free-running (does not stop counting), interrupts enabled
+      TIM6->CR1 = (TIM6->CR1 & ~(TIM_CR1_UDIS_Msk)) | TIM_CR1_ARPE | TIM_CR1_URS | TIM_CR1_OPM;
+    
+      // Interrupt on over/underflow enabled
+      TIM6->DIER |= TIM_DIER_UIE;
+
+      // No prescaler used
+      TIM6->PSC = 0;
+
+      // Value for auto-reload register (sets the timer duration)
+      TIM6->ARR = 1;
+    }
+
 
     // Set the timer to the lowest-numbered (best-possible) priority
     // [4] pp.208, 214, core_cm4.h in (Proj. Dir.)/CMSIS_4/CMSIS/Include

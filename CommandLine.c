@@ -55,6 +55,10 @@ void Query_Scheduler(char *msg)
     case SCHED_RR:
       sprintf(msg, "%d : Round-Robin\n", SCHED_RR);
       break;
+
+    case SCHED_COOP:
+      sprintf(msg, "%d : Cooperative\n", SCHED_COOP);
+      break;
   }
 }
 
@@ -403,6 +407,23 @@ void Add_SubVar(char *msg, uint16_t val)
   }
 }
 
+void Add_Pass(char *msg)
+{
+  char temp[30];
+  if(BI_tasks[edit-1].numsteps < OS_MAX_STEPS_PER_TASK)
+  {
+    sprintf(temp, "  Pass()\r\n");
+    strcat(BI_tasks[edit-1].funcString, temp);
+    ++(BI_tasks[edit-1].numsteps);
+    strcpy(msg, "");
+    DumpTaskInfo(msg);
+  }
+  else
+  {
+    strcpy(msg, "Max number of steps reached, try \"clear\" to start over.\n");
+  }
+}
+
 void DisableTask(char *msg)
 {
   BI_tasks[edit-1].en = 0;
@@ -638,13 +659,17 @@ void Command_CL(char *buf, uint8_t size)
     {
       Add_SetVar(msg, atoi(buf + strlen("SetVar(")));
     }
-     else if(Compare("AddVar", buf))
+    else if(Compare("AddVar", buf))
     {
       Add_AddVar(msg, atoi(buf + strlen("AddVar(")));
     }
-     else if(Compare("SubVar", buf))
+    else if(Compare("SubVar", buf))
     {
       Add_SubVar(msg, atoi(buf + strlen("SubVar(")));
+    }
+    else if(Compare("Pass", buf))
+    {
+      Add_Pass(msg);
     }
   }
   OS_SendString_UART(msg, 0);

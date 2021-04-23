@@ -44,6 +44,7 @@ typedef enum
 {
   SCHED_EDF,
   SCHED_RR,
+  SCHED_COOP,
   SCHED_NUM
 } schedule_t;
 

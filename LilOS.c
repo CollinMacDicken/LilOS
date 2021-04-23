@@ -131,6 +131,7 @@ void OSp_SwapMemNodes(memNode *A, memNode *B);
 void OSp_SetVar(uint16_t val);
 void OSp_AddVar(uint16_t val);
 void OSp_SubVar(uint16_t val);
+void OSp_Pass(uint16_t val);
 /******************************************************************************
 *******************************************************************************
     Helper Functions
@@ -158,7 +159,7 @@ unsigned OS_InitKernel(const unsigned numTasks, const unsigned stackSize)
     OS_systemTick = 0;
     
     //Create Idle task and set it to running state
-    if(OS_Scheduler != SCHED_RR && OS_CreateTask("", 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF) == 0)
+    if(OS_Scheduler == SCHED_EDF && OS_CreateTask("", 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF) == 0)
       return 0;
 
     uint8_t i;
@@ -246,6 +247,11 @@ unsigned OS_CreateTask(char *funcStr, unsigned priority, unsigned runtime, unsig
         {
           tasks[newTaskID].tcb.taskFunc[funcInd] = OSp_SubVar;
           tasks[newTaskID].tcb.funcParam[funcInd] = atoi(temp + strlen("SubVar("));
+        }
+        else if(Compare("Pass", temp))
+        {
+          tasks[newTaskID].tcb.taskFunc[funcInd] = OSp_Pass;
+          tasks[newTaskID].tcb.funcParam[funcInd] = 0;
         }
         else //WHAT
         {
@@ -567,6 +573,7 @@ char OSp_ScheduleTask(void)
       return 0;
 
     case SCHED_RR:
+    case SCHED_COOP:
       OSp_ChangeTaskState(RUNNING, SATISFIED, taskRunningHead);
       if(!taskReadyHead)
       {
@@ -603,6 +610,7 @@ taskNode *OSp_CompareNodePrios(taskNode *A, taskNode *B)
               A->tcb.taskPriority <= B->tcb.taskPriority))? A : B;
 
     case SCHED_RR:
+    case SCHED_COOP:
       return (A->tcb.taskPriority <= B->tcb.taskPriority)? A : B;
   }
 }
@@ -978,6 +986,11 @@ void OSp_AddVar(uint16_t val)
 void OSp_SubVar(uint16_t val)
 {
   OS_TaskRUNNING->taskVar -= val;
+}
+
+void OSp_Pass(uint16_t val)
+{
+  OS_StartTimer();
 }
 
 void OSp_RunTask(void)
