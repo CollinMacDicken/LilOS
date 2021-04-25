@@ -276,7 +276,7 @@ void Command_GPIOpull(char *msg, uint8_t val, uint8_t pin)
 void DumpTaskInfo(char *msg)
 {
   char temp[100];
-  if(edit > 0 && edit < OS_MAX_BITASKS)
+  if(edit > 0 && edit <= OS_MAX_BITASKS)
   {
     sprintf(temp, "Task %d: %s\r\nPriority: %d   Runtime: %d   Deadline: %d\r\n", edit, BI_tasks[edit-1].en? "Enabled" : "Disabled",
             BI_tasks[edit-1].priority, BI_tasks[edit-1].runtime, BI_tasks[edit-1].deadline);
